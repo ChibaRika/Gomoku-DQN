@@ -10,8 +10,20 @@ import pyautogui
 
 #棋盘行数
 x = 15
+
 #棋盘列数
 y = 15
+
+#单次训练局数
+size = 10
+
+#状态空间s（每一手棋盘的记录）
+s = np.zeros((size*x*y,x,y), dtype = int)
+
+#动作空间a（当前落子位置的记录）
+a = np.zeros((size*x*y,2), dtype = int)
+
+totalmove = 0
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("devide:",device)
@@ -24,12 +36,6 @@ def variable_initialization():
     #初始化棋盘 __=0 ○=-1 ●=1
     chessboard = np.zeros((x,y), dtype = int)
     move = 0
-    
-    #状态空间s（每一手棋盘的记录）
-    s = np.zeros((x*y,x,y), dtype = int)
-
-    #动作空间a（当前落子位置的记录）
-    a = np.zeros((x*y,2), dtype = int)
     
     bwin = False
     wwin = False
@@ -83,7 +89,7 @@ def windows():
     
 def aimove():
     
-    global win,move,chessboard,newpiece,x,y
+    global win,move,totalmove,chessboard,newpiece,x,y
     
     values = forward(model,chessboard)
     values = values.cpu().detach().numpy()
@@ -91,7 +97,7 @@ def aimove():
     #随机化每步
     seed = random.randint(1,10)
     
-    if move % 2 == 0 and seed <= 8:
+    if move % 2 == 0 and seed <= 5:
         
         for i in range(225):
         
@@ -107,7 +113,7 @@ def aimove():
         piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
         piece.setFill("black")
         
-    if move % 2 == 0 and seed > 8:
+    if move % 2 == 0 and seed > 5:
         
         for i in range(225):
             
@@ -121,7 +127,7 @@ def aimove():
         piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
         piece.setFill("black")
         
-    if move % 2 == 1 and seed <= 8:
+    if move % 2 == 1 and seed <= 5:
         
         for i in range(225):
         
@@ -137,7 +143,7 @@ def aimove():
         piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
         piece.setFill("white")
         
-    if move % 2 == 1 and seed > 8:
+    if move % 2 == 1 and seed > 5:
         
         for i in range(225):
             
@@ -156,9 +162,9 @@ def aimove():
         
         for j in range(y):
             
-            s[move][i][j] = chessboard[i][j]
-            a[move][0] = posx
-            a[move][1] = posy
+            s[totalmove][i][j] = chessboard[i][j]
+            a[totalmove][0] = posx
+            a[totalmove][1] = posy
             
     if move % 2 == 0:
         print(values[np.argmax(values)])
@@ -177,6 +183,7 @@ def aimove():
     
     #手数+1
     move += 1
+    totalmove += 1
     
     #如果存在,删除上一手棋子高亮
     if "newpiece" in globals():
@@ -301,7 +308,7 @@ def play():
 def initialization():
     
     input_size = 225
-    hidden_sizes = [4096, 4096, 4096, 4096, 4096, 4096, 4096, 4096, 4096, 4096]
+    hidden_sizes = [1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024]
     output_size = 225
     
     model = nn.Sequential(nn.Linear(input_size, hidden_sizes[0]),
@@ -432,30 +439,28 @@ def train():
         print("loss:",loss)
         avgloss += float(loss)
         
-for i in range(1):
-    
+for i in range(size):
     windows()
     variable_initialization()
     play()
+    
+#删除数据为0的部分
+for i in range(size*225):
+    
+    if np.any(s[i,:,:]) == False:
+        s = s[:i,:,:]
+        a = a[:i,:]
+        break
+    
+for i in range(1):
+    train()
+    
+print("training is finished")
 
-    #删除数据为0的部分
-    for i in range(225):
-        
-        if np.any(s[i,:,:]) == False:
-            s = s[:i,:,:]
-            a = a[:i,:]
-            break
-        
-    for i in range(1):
-        train()
-        
-    print("training is finished")
+avgloss /= s.shape[0] - 1
+if avgloss >= 0.0001:
+    print("avgloss:","%0.4f"%avgloss)
+else:
+    print("avgloss:","%0.4e"%avgloss)
     
-    avgloss /= s.shape[0] - 1
-    if avgloss >= 0.0001:
-        print("avgloss:","%0.4f"%avgloss)
-    else:
-        print("avgloss:","%0.4e"%avgloss)
-        
-    torch.save(model_copy, "model.pth")
-    
+torch.save(model_copy, "model.pth")
