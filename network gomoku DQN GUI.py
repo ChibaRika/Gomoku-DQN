@@ -320,7 +320,7 @@ def play():
 def initialization():
     
     input_size = 225
-    hidden_sizes = [1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024]
+    hidden_sizes = [256, 256, 256, 256, 256, 256, 256, 256, 256, 256]
     output_size = 225
     
     model = nn.Sequential(nn.Linear(input_size, hidden_sizes[0]),
@@ -424,16 +424,16 @@ def train():
         #下一步的奖励r
         #黑胜，前两步的白棋负奖励
         if bwin == True and shufflelist[i] == s.shape[0] - 3:
-            reward = -0.00009
+            reward = -0.9
         #黑胜，前一步的黑棋正奖励
         if bwin == True and shufflelist[i] == s.shape[0] - 2:
-            reward = 0.0001
+            reward = 1
         #白胜，前两步的黑棋负奖励
         if wwin == True and shufflelist[i] == s.shape[0] - 3:
-            reward = -0.00009
+            reward = -0.9
         #白胜，前一步的白棋正奖励
         if wwin == True and shufflelist[i] == s.shape[0] - 2:
-            reward = 0.0001
+            reward = 1
         else:
             reward = 0
             
@@ -441,10 +441,10 @@ def train():
         gamma = -0.9
 
         #目标
-        targets = torch.max(forward(model_copy,s[shufflelist[i]+1,:,:])) * gamma + reward
+        targets = torch.max(forward(model,s[shufflelist[i]+1,:,:])) * gamma + reward
         
         #计算损失
-        outputs = forward(model,inputs)
+        outputs = forward(model_copy,inputs)
         loss = loss_function(outputs,targets)
         
         #优化器调节梯度为0
@@ -460,7 +460,7 @@ def train():
         avgloss += float(loss)
 
 #训练次数
-for k in range(100):
+for k in range(10):
     
     avgloss = 0
     
@@ -503,5 +503,5 @@ for k in range(100):
     if avgloss >= 0.0001:
         print("avgloss:","%0.6f"%avgloss)
     else:
-        print("avgloss:","%0.4e"%avgloss)
+        print("avgloss:","%0.6e"%avgloss)
         
