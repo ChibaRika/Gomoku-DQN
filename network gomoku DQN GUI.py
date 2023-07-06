@@ -17,6 +17,9 @@ y = 15
 #单次训练局数
 size = 10
 
+#是否显示自对弈窗口
+windows_visible = True
+
 #状态空间s（每一手棋盘的记录）
 s = np.zeros((size*x*y,x,y), dtype = int)
 
@@ -89,7 +92,7 @@ def windows():
     
 def aimove():
     
-    global win,move,totalmove,chessboard,newpiece,x,y
+    global win,move,totalmove,chessboard,newpiece,x,y,windows_visible
     
     values = forward(model,chessboard)
     values = values.cpu().detach().numpy()
@@ -110,8 +113,9 @@ def aimove():
                 break
 
         chessboard[posx][posy] = 1
-        piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
-        piece.setFill("black")
+        if windows_visible == True:
+            piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
+            piece.setFill("black")
         
     if move % 2 == 0 and seed > 5:
         
@@ -124,9 +128,10 @@ def aimove():
                 break
             
         chessboard[posx][posy] = 1
-        piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
-        piece.setFill("black")
-        
+        if windows_visible == True:
+            piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
+            piece.setFill("black")
+            
     if move % 2 == 1 and seed <= 5:
         
         for i in range(225):
@@ -140,8 +145,9 @@ def aimove():
                 break
 
         chessboard[posx][posy] = -1
-        piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
-        piece.setFill("white")
+        if windows_visible == True:
+            piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
+            piece.setFill("white")
         
     if move % 2 == 1 and seed > 5:
         
@@ -154,8 +160,9 @@ def aimove():
                 break
             
         chessboard[posx][posy] = -1
-        piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
-        piece.setFill("white")
+        if windows_visible == True:
+            piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
+            piece.setFill("white")
 
     #记录s,a
     for i in range(x):
@@ -166,12 +173,14 @@ def aimove():
             a[totalmove][0] = posx
             a[totalmove][1] = posy
             
+    """
     if move % 2 == 0:
         print(values[np.argmax(values)])
         
     if move % 2 == 1:
         print(values[np.argmin(values)])
-        
+    """
+    
     if move % 2 == 0:
         winjudgement(1,posx,posy)
         
@@ -179,25 +188,28 @@ def aimove():
         winjudgement(-1,posx,posy)
         
     #绘制棋子
-    piece.draw(win)
+    if windows_visible == True:
+        piece.draw(win)
     
     #手数+1
     move += 1
     totalmove += 1
     
     #如果存在,删除上一手棋子高亮
-    if "newpiece" in globals():
-        newpiece.undraw()
-    
-    newpiece = Polygon(Point(posx * 75 + 75, posy * 75 + 75), \
-                       Point(posx * 75 + 75 + 30, posy * 75 + 75), \
-                       Point(posx * 75 + 75, posy * 75 + 75 + 30))
-    newpiece.setOutline("red")
-    newpiece.setFill("red")
-    
+    if windows_visible == True:
+        if "newpiece" in globals():
+            newpiece.undraw()
+        
+        newpiece = Polygon(Point(posx * 75 + 75, posy * 75 + 75), \
+                           Point(posx * 75 + 75 + 30, posy * 75 + 75), \
+                           Point(posx * 75 + 75, posy * 75 + 75 + 30))
+        newpiece.setOutline("red")
+        newpiece.setFill("red")
+        
     #绘制上一手棋子高亮
-    newpiece.draw(win)
-
+    if windows_visible == True:
+        newpiece.draw(win)
+        
 #胜利判断
 def winjudgement(chess,movex,movey):
 
@@ -438,29 +450,47 @@ def train():
         
         print("loss:",loss)
         avgloss += float(loss)
-        
-for i in range(size):
-    windows()
-    variable_initialization()
-    play()
-    
-#删除数据为0的部分
-for i in range(size*225):
-    
-    if np.any(s[i,:,:]) == False:
-        s = s[:i,:,:]
-        a = a[:i,:]
-        break
-    
-for i in range(1):
-    train()
-    
-print("training is finished")
 
-avgloss /= s.shape[0] - 1
-if avgloss >= 0.0001:
-    print("avgloss:","%0.4f"%avgloss)
-else:
-    print("avgloss:","%0.4e"%avgloss)
+#训练次数
+for k in range(10):
     
-torch.save(model_copy, "model.pth")
+    #状态空间s（每一手棋盘的记录）
+    s = np.zeros((size*x*y,x,y), dtype = int)
+    
+    #动作空间a（当前落子位置的记录）
+    a = np.zeros((size*x*y,2), dtype = int)
+    
+    totalmove = 0
+    
+    avgloss = 0
+    
+    model = torch.load("model.pth")
+    model = model.to(device)
+    
+    for i in range(size):
+        if windows_visible == True:
+            windows()
+        variable_initialization()
+        play()
+        
+    #删除数据为0的部分
+    for i in range(size*225):
+        
+        if np.any(s[i,:,:]) == False:
+            s = s[:i,:,:]
+            a = a[:i,:]
+            break
+        
+    for i in range(1):
+        train()
+        
+    print("training is finished")
+
+    avgloss /= s.shape[0] - 1
+    if avgloss >= 0.0001:
+        print("avgloss:","%0.4f"%avgloss)
+    else:
+        print("avgloss:","%0.4e"%avgloss)
+        
+    torch.save(model_copy, "model.pth")
+    
