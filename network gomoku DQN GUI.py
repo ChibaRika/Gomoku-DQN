@@ -14,11 +14,12 @@ x = 15
 y = 15
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("devide:",device)
 
 #变量初始化
 def variable_initialization():
     
-    global move,chessboard,s,a,bwin,wwin,draw
+    global move,chessboard,s,a,bwin,wwin,draw,avgloss
     
     #初始化棋盘 __=0 ○=-1 ●=1
     chessboard = np.zeros((x,y), dtype = int)
@@ -33,6 +34,8 @@ def variable_initialization():
     bwin = False
     wwin = False
     draw = False
+
+    avgloss = 0
     
 #GUI窗口
 def windows():
@@ -83,7 +86,7 @@ def aimove():
     global win,move,chessboard,newpiece,x,y
     
     values = forward(model,chessboard)
-    values = values.detach().numpy()
+    values = values.cpu().detach().numpy()
 
     #随机化每步
     seed = random.randint(1,10)
@@ -96,7 +99,7 @@ def aimove():
             posy = np.argmax(values) % 15
             
             if chessboard[posx][posy] != 0:
-                values[np.argmax(values)] = 0
+                values[np.argmax(values)] = -1
             else:
                 break
 
@@ -298,7 +301,7 @@ def play():
 def initialization():
     
     input_size = 225
-    hidden_sizes = [256, 256, 256, 256, 256, 256]
+    hidden_sizes = [4096, 4096, 4096, 4096, 4096, 4096, 4096, 4096, 4096, 4096]
     output_size = 225
     
     model = nn.Sequential(nn.Linear(input_size, hidden_sizes[0]),
@@ -313,7 +316,15 @@ def initialization():
                           nn.ReLU(),
                           nn.Linear(hidden_sizes[4], hidden_sizes[5]),
                           nn.ReLU(),
-                          nn.Linear(hidden_sizes[5], output_size),
+                          nn.Linear(hidden_sizes[5], hidden_sizes[6]),
+                          nn.ReLU(),
+                          nn.Linear(hidden_sizes[6], hidden_sizes[7]),
+                          nn.ReLU(),
+                          nn.Linear(hidden_sizes[7], hidden_sizes[8]),
+                          nn.ReLU(),
+                          nn.Linear(hidden_sizes[8], hidden_sizes[9]),
+                          nn.ReLU(),
+                          nn.Linear(hidden_sizes[9], output_size),
                           nn.Tanh())
     
     print(model)
@@ -324,16 +335,21 @@ def initialization():
     print(model[8].weight)
     print(model[10].weight)
     print(model[12].weight)
+    print(model[14].weight)
+    print(model[16].weight)
+    print(model[18].weight)
+    print(model[20].weight)
     
     #保存模型
     torch.save(model, "model.pth")
-
+    
 #前向传播
 def forward(network,inputs):
 
     inputs = inputs.flatten()
     inputs = inputs.astype('float32')
     inputs_tensor = torch.from_numpy(inputs)
+    inputs_tensor = inputs_tensor.to(device)
     outputs = network(inputs_tensor)
     return outputs
 
@@ -362,7 +378,7 @@ loss_function = nn.MSELoss()
 
 def train():
 
-    global targets,model_copy,bwin,wwin,draw
+    global targets,model_copy,bwin,wwin,draw,avgloss
 
     #复制模型用于训练
     model_copy = copy.deepcopy(model)
@@ -374,7 +390,7 @@ def train():
     #打乱数据索引
     shufflelist = np.random.permutation(np.arange(0,s.shape[0]))
 
-    #使用下一步进行训练，最后一步不进行训练
+    #使用下一步进行训练（最后一步不进行训练）
     for i in range(s.shape[0] - 1):
         
         inputs = s[shufflelist[i],:,:]
@@ -384,13 +400,13 @@ def train():
 
         #下一步的奖励r
         if bwin == True and shufflelist[i] % 2 == 0:
-            reward = -0.009
+            reward = -0.0009
         if bwin == True and shufflelist[i] % 2 == 1:
-            reward = 0.01
+            reward = 0.001
         if wwin == True and shufflelist[i] % 2 == 0:
-            reward = 0.01
+            reward = 0.001
         if wwin == True and shufflelist[i] % 2 == 1:
-            reward = -0.009
+            reward = -0.0009
         if draw == True:
             reward = 0
             
@@ -414,7 +430,8 @@ def train():
         optimizer.step()
         
         print("loss:",loss)
-
+        avgloss += float(loss)
+        
 for i in range(1):
     
     windows()
@@ -431,6 +448,14 @@ for i in range(1):
         
     for i in range(1):
         train()
+        
+    print("training is finished")
+    
+    avgloss /= s.shape[0] - 1
+    if avgloss >= 0.0001:
+        print("avgloss:","%0.4f"%avgloss)
+    else:
+        print("avgloss:","%0.4e"%avgloss)
         
     torch.save(model_copy, "model.pth")
     
