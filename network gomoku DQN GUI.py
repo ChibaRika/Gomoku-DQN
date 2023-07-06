@@ -14,17 +14,17 @@ x = 15
 #棋盘列数
 y = 15
 
-#单次训练局数
+#单次训练局数（更新网络局数）
 size = 10
 
 #是否显示自对弈窗口
-windows_visible = True
+windows_visible = False
 
 #状态空间s（每一手棋盘的记录）
-s = np.zeros((size*x*y,x,y), dtype = int)
+s = np.zeros((x*y,x,y), dtype = int)
 
 #动作空间a（当前落子位置的记录）
-a = np.zeros((size*x*y,2), dtype = int)
+a = np.zeros((x*y,2), dtype = int)
 
 totalmove = 0
 
@@ -230,11 +230,11 @@ def winjudgement(chess,movex,movey):
             chessboard[movex][movey+i] == chess:
             if chess == 1:
                 bwin = True
-                print("Black Win!")
+                #print("Black Win!")
                 return
             if chess == -1:
                 wwin = True
-                print("White Win!")
+                #print("White Win!")
                 return
             
     for i in range(5): #纵向
@@ -252,11 +252,11 @@ def winjudgement(chess,movex,movey):
             chessboard[movex+i][movey] == chess:
             if chess == 1:
                 bwin = True
-                print("Black Win!")
+                #print("Black Win!")
                 return
             if chess == -1:
                 wwin = True
-                print("White Win!")
+                #print("White Win!")
                 return
 
     for i in range(5): #斜向，左上到右下
@@ -274,11 +274,11 @@ def winjudgement(chess,movex,movey):
             chessboard[movex+i][movey+i] == chess:
             if chess == 1:
                 bwin = True
-                print("Black Win!")
+                #print("Black Win!")
                 return
             if chess == -1:
                 wwin = True
-                print("White Win!")
+                #print("White Win!")
                 return
 
     for i in range(5): #斜向，右上到左下
@@ -296,16 +296,16 @@ def winjudgement(chess,movex,movey):
             chessboard[movex+i][movey-i] == chess:
             if chess == 1:
                 bwin = True
-                print("Black Win!")
+                #print("Black Win!")
                 return
             if chess == -1:
                 wwin = True
-                print("White Win!")
+                #print("White Win!")
                 return
             
     if move == 225:
         draw = True
-        print("Draw!")
+        #print("Draw!")
         
 def play():
     
@@ -411,6 +411,10 @@ def train():
 
     #使用下一步进行训练（最后一步不进行训练）
     for i in range(s.shape[0] - 1):
+
+        #最后一步
+        if shufflelist[i] == s.shape[0] - 1:
+            continue
         
         inputs = s[shufflelist[i],:,:]
         inputs = inputs.flatten()
@@ -418,22 +422,26 @@ def train():
         inputs_tensor = torch.from_numpy(inputs)
 
         #下一步的奖励r
-        if bwin == True and shufflelist[i] % 2 == 0:
-            reward = -0.0009
-        if bwin == True and shufflelist[i] % 2 == 1:
-            reward = 0.001
-        if wwin == True and shufflelist[i] % 2 == 0:
-            reward = 0.001
-        if wwin == True and shufflelist[i] % 2 == 1:
-            reward = -0.0009
-        if draw == True:
+        #黑胜，前两步的白棋负奖励
+        if bwin == True and shufflelist[i] == s.shape[0] - 3:
+            reward = -0.00009
+        #黑胜，前一步的黑棋正奖励
+        if bwin == True and shufflelist[i] == s.shape[0] - 2:
+            reward = 0.0001
+        #白胜，前两步的黑棋负奖励
+        if wwin == True and shufflelist[i] == s.shape[0] - 3:
+            reward = -0.00009
+        #白胜，前一步的白棋正奖励
+        if wwin == True and shufflelist[i] == s.shape[0] - 2:
+            reward = 0.0001
+        else:
             reward = 0
             
         #惩罚系数γ
         gamma = -0.9
 
         #目标
-        targets = torch.max(forward(model_copy,s[shufflelist[i+1],:,:])) * gamma + reward
+        targets = torch.max(forward(model_copy,s[shufflelist[i]+1,:,:])) * gamma + reward
         
         #计算损失
         outputs = forward(model,inputs)
@@ -448,49 +456,52 @@ def train():
         #对每个参数进行调优
         optimizer.step()
         
-        print("loss:",loss)
+        #print("loss:",loss)
         avgloss += float(loss)
 
 #训练次数
-for k in range(10):
-    
-    #状态空间s（每一手棋盘的记录）
-    s = np.zeros((size*x*y,x,y), dtype = int)
-    
-    #动作空间a（当前落子位置的记录）
-    a = np.zeros((size*x*y,2), dtype = int)
-    
-    totalmove = 0
+for k in range(100):
     
     avgloss = 0
     
     model = torch.load("model.pth")
     model = model.to(device)
     
-    for i in range(size):
-        if windows_visible == True:
-            windows()
-        variable_initialization()
-        play()
+    for m in range(size):
         
-    #删除数据为0的部分
-    for i in range(size*225):
+        #状态空间s（每一手棋盘的记录）
+        s = np.zeros((x*y,x,y), dtype = int)
+    
+        #动作空间a（当前落子位置的记录）
+        a = np.zeros((x*y,2), dtype = int)
+    
+        totalmove = 0
         
-        if np.any(s[i,:,:]) == False:
-            s = s[:i,:,:]
-            a = a[:i,:]
-            break
+        for i in range(1):
+            if windows_visible == True:
+                windows()
+            variable_initialization()
+            play()
+            
+        #删除数据为0的部分
+        for i in range(225):
+            
+            if np.any(s[i,:,:]) == False:
+                s = s[:i,:,:]
+                a = a[:i,:]
+                break
+            
+        for i in range(1):
+            train()
+            
+        print("training is finished")
         
-    for i in range(1):
-        train()
+        avgloss /= s.shape[0] - 1
         
-    print("training is finished")
-
-    avgloss /= s.shape[0] - 1
+        torch.save(model_copy, "model.pth")
+        
     if avgloss >= 0.0001:
-        print("avgloss:","%0.4f"%avgloss)
+        print("avgloss:","%0.6f"%avgloss)
     else:
         print("avgloss:","%0.4e"%avgloss)
         
-    torch.save(model_copy, "model.pth")
-    
