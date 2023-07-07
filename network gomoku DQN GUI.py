@@ -18,7 +18,7 @@ y = 15
 size = 10
 
 #是否显示自对弈窗口
-windows_visible = False
+windows_visible = True
 
 #状态空间s（每一手棋盘的记录）
 s = np.zeros((x*y,x,y), dtype = int)
@@ -92,32 +92,58 @@ def windows():
     
 def aimove():
     
-    global win,move,totalmove,chessboard,newpiece,x,y,windows_visible
+    global win,move,totalmove,chessboard,newpiece,x,y,windows_visible,maxvalue,maxposx,maxposy
     
-    values = forward(model,chessboard)
-    values = values.cpu().detach().numpy()
+    #values = model.forward(chessboard)
+    #values = values.cpu().detach().numpy()
 
+    firstvalue = True
+    
+    for i in range(15):
+        for j in range(15):
+
+            if chessboard[i][j] != 0:
+                continue
+            
+            if move % 2 == 0 and chessboard[i][j] == 0:
+                chessboard[i][j] = 1
+            if move % 2 == 1 and chessboard[i][j] == 0:
+                chessboard[i][j] = -1
+                
+            values = model.forward(chessboard)
+            values = values.cpu().detach().numpy()
+            
+            if firstvalue == True:
+                maxvalue[move] = values
+                firstvalue = False
+                
+            if move % 2 == 0 and values >= maxvalue[move]:
+                maxvalue[move] = values
+                maxposx[move] = i
+                maxposy[move] = j
+
+            if move % 2 == 1 and values <= maxvalue[move]:
+                maxvalue[move] = values
+                maxposx[move] = i
+                maxposy[move] = j
+                
+            chessboard[i][j] = 0
+            
     #随机化每步
     seed = random.randint(1,10)
     
-    if move % 2 == 0 and seed <= 5:
+    if move % 2 == 0 and seed <= 9:
         
-        for i in range(225):
+        posx = maxposx[move]
+        posy = maxposy[move]
         
-            posx = np.argmax(values) // 15
-            posy = np.argmax(values) % 15
-            
-            if chessboard[posx][posy] != 0:
-                values[np.argmax(values)] = -1
-            else:
-                break
-
         chessboard[posx][posy] = 1
+        
         if windows_visible == True:
             piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
             piece.setFill("black")
         
-    if move % 2 == 0 and seed > 5:
+    if move % 2 == 0 and seed > 9:
         
         for i in range(225):
             
@@ -128,28 +154,23 @@ def aimove():
                 break
             
         chessboard[posx][posy] = 1
+        
         if windows_visible == True:
             piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
             piece.setFill("black")
             
-    if move % 2 == 1 and seed <= 5:
+    if move % 2 == 1 and seed <= 9:
         
-        for i in range(225):
+        posx = maxposx[move]
+        posy = maxposy[move]
         
-            posx = np.argmin(values) // 15
-            posy = np.argmin(values) % 15
-            
-            if chessboard[posx][posy] != 0:
-                values[np.argmin(values)] = 1
-            else:
-                break
-
         chessboard[posx][posy] = -1
+        
         if windows_visible == True:
             piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
             piece.setFill("white")
-        
-    if move % 2 == 1 and seed > 5:
+            
+    if move % 2 == 1 and seed > 9:
         
         for i in range(225):
             
@@ -160,6 +181,7 @@ def aimove():
                 break
             
         chessboard[posx][posy] = -1
+        
         if windows_visible == True:
             piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
             piece.setFill("white")
@@ -315,13 +337,102 @@ def play():
         aimove()
         if bwin == True or wwin == True or draw == True:
             return
+
+class net(nn.Module):
+    
+    def __init__(self):
+        super(net,self).__init__()
         
+        self.layer1 = nn.Conv2d(in_channels=3, out_channels=64, stride=1, kernel_size=5, padding=2)
+        
+        self.layer2 = nn.ReLU()
+
+        self.layer3 = nn.MaxPool2d(kernel_size=2, stride=2)
+        
+        self.layer4 = nn.Conv2d(in_channels=64, out_channels=128, stride=1, kernel_size=5, padding=2)
+        
+        self.layer5 = nn.ReLU()
+        
+        self.layer6 = nn.MaxPool2d(kernel_size=2, stride=2)
+        
+        self.layer7 = nn.Conv2d(in_channels=128, out_channels=256, stride=1, kernel_size=5, padding=2)
+        
+        self.layer8 = nn.ReLU()
+        
+        self.layer9 = nn.Flatten()
+
+        self.layer10 = nn.Linear(in_features=256, out_features=128)
+
+        self.layer11 = nn.ReLU()
+
+        self.layer12 = nn.Linear(in_features=128, out_features=1)
+
+        self.layer13 = nn.Tanh()
+
+    def forward(self,inputs):
+
+        global x,y
+        
+        inputs = inputs.flatten()
+        
+        #给输入分通道
+        inputs_channels = np.zeros((3,x,y), dtype = int)
+        for i in range(15):
+            for j in range(15):
+                
+                if inputs[i * 15 + j] == 1:
+                    inputs_channels[0][i][j] = 1 #黑棋
+
+                if inputs[i * 15 + j] == -1:
+                    inputs_channels[1][i][j] = 1 #白棋
+
+                if inputs[i * 15 + j] == 0:
+                    inputs_channels[2][i][j] = 1 #空
+                    
+        inputs_channels = inputs_channels.astype('float32')
+        
+        inputs_tensor = torch.from_numpy(inputs_channels)
+        inputs_tensor = inputs_tensor.to(device)
+    
+        mid = self.layer1(inputs_tensor)
+        mid = self.layer2(mid)
+        mid = self.layer3(mid)
+        mid = self.layer4(mid)
+        mid = self.layer5(mid)
+        mid = self.layer6(mid)
+        mid = self.layer7(mid)
+        mid = self.layer8(mid)
+        mid = mid.view(-1,256)
+        mid = self.layer9(mid)
+        mid = self.layer10(mid)
+        mid = self.layer11(mid)
+        mid = self.layer12(mid)
+        mid = self.layer13(mid)
+        outputs = torch.mean(mid, dim = 0)
+        return outputs
+"""
 #模型初始化
 def initialization():
     
     input_size = 225
     hidden_sizes = [256, 256, 256, 256, 256, 256, 256, 256, 256, 256]
     output_size = 225
+    
+    model = nn.Sequential(nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5, padding=2),
+                          nn.ReLU(),
+                          nn.MaxPool2d(kernel_size=2),
+                          nn.Conv2d(in_channels=64, out_channels=128, kernel_size=5, padding=2),
+                          nn.ReLU(),
+                          nn.MaxPool2d(kernel_size=2),
+                          nn.Conv2d(in_channels=128, out_channels=256, kernel_size=5, padding=2),
+                          nn.ReLU(),
+                          nn.MaxPool2d(kernel_size=2),
+                          nn.Flatten(),
+                          nn.Linear(in_features=256, out_features=128),
+                          nn.ReLU(),
+                          nn.Linear(in_features=128, out_features=1),
+                          nn.Tanh()
+                          )
     
     model = nn.Sequential(nn.Linear(input_size, hidden_sizes[0]),
                           nn.ReLU(),
@@ -361,19 +472,40 @@ def initialization():
     
     #保存模型
     torch.save(model, "model.pth")
-    
+    """
+"""
 #前向传播
 def forward(network,inputs):
 
     inputs = inputs.flatten()
-    inputs = inputs.astype('float32')
-    inputs_tensor = torch.from_numpy(inputs)
+    #inputs = inputs.astype('float32')
+
+    #给输入分通道
+    inputs_channels = np.zeros((3,x,y), dtype = int)
+    for i in range(15):
+        for j in range(15):
+            
+            if inputs[i * 15 + j] == 1:
+                inputs_channels[0][i][j] = 1 #黑棋
+
+            if inputs[i * 15 + j] == -1:
+                inputs_channels[1][i][j] = 1 #白棋
+
+            if inputs[i * 15 + j] == 0:
+                inputs_channels[2][i][j] = 1 #空
+                
+    inputs_channels = inputs_channels.astype('float32')
+    
+    inputs_tensor = torch.from_numpy(inputs_channels)
     inputs_tensor = inputs_tensor.to(device)
     outputs = network(inputs_tensor)
     return outputs
+"""
+#模型初始化
+model = net()
 
 if os.path.isfile("model.pth") == False:
-    initialization()
+    torch.save(model, "model.pth")
     
 #加载模型
 model = torch.load("model.pth")
@@ -397,9 +529,10 @@ loss_function = nn.MSELoss()
 
 def train():
 
-    global targets,model_copy,bwin,wwin,draw,avgloss
+    global targets,model_copy,bwin,wwin,draw,avgloss,maxvalue
 
     #复制模型用于训练
+    model_copy = net()
     model_copy = copy.deepcopy(model)
     model_copy = model_copy.to(device)
 
@@ -424,16 +557,16 @@ def train():
         #下一步的奖励r
         #黑胜，前两步的白棋负奖励
         if bwin == True and shufflelist[i] == s.shape[0] - 3:
-            reward = -0.9
+            reward = -0.09
         #黑胜，前一步的黑棋正奖励
         if bwin == True and shufflelist[i] == s.shape[0] - 2:
-            reward = 1
+            reward = 0.1
         #白胜，前两步的黑棋负奖励
         if wwin == True and shufflelist[i] == s.shape[0] - 3:
-            reward = -0.9
+            reward = -0.09
         #白胜，前一步的白棋正奖励
         if wwin == True and shufflelist[i] == s.shape[0] - 2:
-            reward = 1
+            reward = 0.1
         else:
             reward = 0
             
@@ -441,10 +574,14 @@ def train():
         gamma = -0.9
 
         #目标
-        targets = torch.max(forward(model,s[shufflelist[i]+1,:,:])) * gamma + reward
+        targets = np.array([0])
+        targets[0] = maxvalue[shufflelist[i]+1] * gamma + reward
+        targets = targets.astype('float32')
+        targets = torch.from_numpy(targets).cuda()
+        #targets = torch.max(model.forward(s[shufflelist[i]+1,:,:])) * gamma + reward
         
         #计算损失
-        outputs = forward(model_copy,inputs)
+        outputs = model_copy.forward(inputs)
         loss = loss_function(outputs,targets)
         
         #优化器调节梯度为0
@@ -460,7 +597,7 @@ def train():
         avgloss += float(loss)
 
 #训练次数
-for k in range(10):
+for k in range(1):
     
     avgloss = 0
     
@@ -474,7 +611,12 @@ for k in range(10):
     
         #动作空间a（当前落子位置的记录）
         a = np.zeros((x*y,2), dtype = int)
-    
+
+        #最大价值
+        maxvalue = np.zeros((x*y), dtype = 'float32')
+        maxposx = np.zeros((x*y), dtype = 'int')
+        maxposy = np.zeros((x*y), dtype = 'int')
+        
         totalmove = 0
         
         for i in range(1):
@@ -489,6 +631,7 @@ for k in range(10):
             if np.any(s[i,:,:]) == False:
                 s = s[:i,:,:]
                 a = a[:i,:]
+                maxvalue = maxvalue[:i]
                 break
             
         for i in range(1):
