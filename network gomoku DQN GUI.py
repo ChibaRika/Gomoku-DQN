@@ -20,16 +20,8 @@ size = 10
 #是否显示自对弈窗口
 windows_visible = True
 
-#状态空间s（每一手棋盘的记录）
-s = np.zeros((x*y,x,y), dtype = int)
-
-#动作空间a（当前落子位置的记录）
-a = np.zeros((x*y,2), dtype = int)
-
-totalmove = 0
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("devide:",device)
+print("device:",device)
 
 #变量初始化
 def variable_initialization():
@@ -92,11 +84,8 @@ def windows():
     
 def aimove():
     
-    global win,move,totalmove,chessboard,newpiece,x,y,windows_visible,maxvalue,maxposx,maxposy
+    global win,move,chessboard,newpiece,x,y,windows_visible,maxvalue,maxposx,maxposy
     
-    #values = model.forward(chessboard)
-    #values = values.cpu().detach().numpy()
-
     firstvalue = True
     
     for i in range(15):
@@ -112,16 +101,20 @@ def aimove():
                 
             values = model.forward(chessboard)
             values = values.cpu().detach().numpy()
+            #随机化每步
+            values += random.randint(-10,10) / 1000
             
             if firstvalue == True:
                 maxvalue[move] = values
                 firstvalue = False
-                
+
+            #黑棋寻找最大价值位置落子
             if move % 2 == 0 and values >= maxvalue[move]:
                 maxvalue[move] = values
                 maxposx[move] = i
                 maxposy[move] = j
 
+            #白棋寻找最小价值位置落子
             if move % 2 == 1 and values <= maxvalue[move]:
                 maxvalue[move] = values
                 maxposx[move] = i
@@ -129,10 +122,7 @@ def aimove():
                 
             chessboard[i][j] = 0
             
-    #随机化每步
-    seed = random.randint(1,10)
-    
-    if move % 2 == 0 and seed <= 9:
+    if move % 2 == 0:
         
         posx = maxposx[move]
         posy = maxposy[move]
@@ -142,24 +132,8 @@ def aimove():
         if windows_visible == True:
             piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
             piece.setFill("black")
-        
-    if move % 2 == 0 and seed > 9:
-        
-        for i in range(225):
             
-            posx = random.randint(0,14)
-            posy = random.randint(0,14)
-            
-            if chessboard[posx][posy] == 0:
-                break
-            
-        chessboard[posx][posy] = 1
-        
-        if windows_visible == True:
-            piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
-            piece.setFill("black")
-            
-    if move % 2 == 1 and seed <= 9:
+    if move % 2 == 1:
         
         posx = maxposx[move]
         posy = maxposy[move]
@@ -170,38 +144,16 @@ def aimove():
             piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
             piece.setFill("white")
             
-    if move % 2 == 1 and seed > 9:
-        
-        for i in range(225):
-            
-            posx = random.randint(0,14)
-            posy = random.randint(0,14)
-            
-            if chessboard[posx][posy] == 0:
-                break
-            
-        chessboard[posx][posy] = -1
-        
-        if windows_visible == True:
-            piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
-            piece.setFill("white")
-
     #记录s,a
     for i in range(x):
         
         for j in range(y):
             
-            s[totalmove][i][j] = chessboard[i][j]
-            a[totalmove][0] = posx
-            a[totalmove][1] = posy
-            
-    """
-    if move % 2 == 0:
-        print(values[np.argmax(values)])
-        
-    if move % 2 == 1:
-        print(values[np.argmin(values)])
-    """
+            s[move][i][j] = chessboard[i][j]
+            a[move][0] = posx
+            a[move][1] = posy
+
+    print(maxvalue[move])
     
     if move % 2 == 0:
         winjudgement(1,posx,posy)
@@ -215,7 +167,6 @@ def aimove():
     
     #手数+1
     move += 1
-    totalmove += 1
     
     #如果存在,删除上一手棋子高亮
     if windows_visible == True:
@@ -337,7 +288,7 @@ def play():
         aimove()
         if bwin == True or wwin == True or draw == True:
             return
-
+        
 class net(nn.Module):
     
     def __init__(self):
@@ -359,13 +310,13 @@ class net(nn.Module):
         
         self.layer8 = nn.ReLU()
         
-        self.layer9 = nn.Flatten()
+        self.layer9 = nn.Flatten(start_dim=0, end_dim=3)
 
-        self.layer10 = nn.Linear(in_features=256, out_features=128)
+        self.layer10 = nn.Linear(in_features=2304, out_features=48)
 
         self.layer11 = nn.ReLU()
 
-        self.layer12 = nn.Linear(in_features=128, out_features=1)
+        self.layer12 = nn.Linear(in_features=48, out_features=1)
 
         self.layer13 = nn.Tanh()
 
@@ -375,25 +326,26 @@ class net(nn.Module):
         
         inputs = inputs.flatten()
         
-        #给输入分通道
-        inputs_channels = np.zeros((3,x,y), dtype = int)
+        #给输入分通道[batch_size, channel, x, y]
+        inputs_channels = np.zeros((1,3,x,y), dtype = int)
+        
         for i in range(15):
             for j in range(15):
                 
                 if inputs[i * 15 + j] == 1:
-                    inputs_channels[0][i][j] = 1 #黑棋
-
+                    inputs_channels[0][0][i][j] = 1 #黑棋
+                    
                 if inputs[i * 15 + j] == -1:
-                    inputs_channels[1][i][j] = 1 #白棋
-
+                    inputs_channels[0][1][i][j] = 1 #白棋
+                    
                 if inputs[i * 15 + j] == 0:
-                    inputs_channels[2][i][j] = 1 #空
+                    inputs_channels[0][2][i][j] = 1 #空
                     
         inputs_channels = inputs_channels.astype('float32')
         
         inputs_tensor = torch.from_numpy(inputs_channels)
         inputs_tensor = inputs_tensor.to(device)
-    
+        
         mid = self.layer1(inputs_tensor)
         mid = self.layer2(mid)
         mid = self.layer3(mid)
@@ -402,105 +354,13 @@ class net(nn.Module):
         mid = self.layer6(mid)
         mid = self.layer7(mid)
         mid = self.layer8(mid)
-        mid = mid.view(-1,256)
         mid = self.layer9(mid)
         mid = self.layer10(mid)
         mid = self.layer11(mid)
         mid = self.layer12(mid)
-        mid = self.layer13(mid)
-        outputs = torch.mean(mid, dim = 0)
+        outputs = self.layer13(mid)
         return outputs
-"""
-#模型初始化
-def initialization():
     
-    input_size = 225
-    hidden_sizes = [256, 256, 256, 256, 256, 256, 256, 256, 256, 256]
-    output_size = 225
-    
-    model = nn.Sequential(nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5, padding=2),
-                          nn.ReLU(),
-                          nn.MaxPool2d(kernel_size=2),
-                          nn.Conv2d(in_channels=64, out_channels=128, kernel_size=5, padding=2),
-                          nn.ReLU(),
-                          nn.MaxPool2d(kernel_size=2),
-                          nn.Conv2d(in_channels=128, out_channels=256, kernel_size=5, padding=2),
-                          nn.ReLU(),
-                          nn.MaxPool2d(kernel_size=2),
-                          nn.Flatten(),
-                          nn.Linear(in_features=256, out_features=128),
-                          nn.ReLU(),
-                          nn.Linear(in_features=128, out_features=1),
-                          nn.Tanh()
-                          )
-    
-    model = nn.Sequential(nn.Linear(input_size, hidden_sizes[0]),
-                          nn.ReLU(),
-                          nn.Linear(hidden_sizes[0], hidden_sizes[1]),
-                          nn.ReLU(),
-                          nn.Linear(hidden_sizes[1], hidden_sizes[2]),
-                          nn.ReLU(),
-                          nn.Linear(hidden_sizes[2], hidden_sizes[3]),
-                          nn.ReLU(),
-                          nn.Linear(hidden_sizes[3], hidden_sizes[4]),
-                          nn.ReLU(),
-                          nn.Linear(hidden_sizes[4], hidden_sizes[5]),
-                          nn.ReLU(),
-                          nn.Linear(hidden_sizes[5], hidden_sizes[6]),
-                          nn.ReLU(),
-                          nn.Linear(hidden_sizes[6], hidden_sizes[7]),
-                          nn.ReLU(),
-                          nn.Linear(hidden_sizes[7], hidden_sizes[8]),
-                          nn.ReLU(),
-                          nn.Linear(hidden_sizes[8], hidden_sizes[9]),
-                          nn.ReLU(),
-                          nn.Linear(hidden_sizes[9], output_size),
-                          nn.Tanh())
-    
-    print(model)
-    print(model[0].weight)
-    print(model[2].weight)
-    print(model[4].weight)
-    print(model[6].weight)
-    print(model[8].weight)
-    print(model[10].weight)
-    print(model[12].weight)
-    print(model[14].weight)
-    print(model[16].weight)
-    print(model[18].weight)
-    print(model[20].weight)
-    
-    #保存模型
-    torch.save(model, "model.pth")
-    """
-"""
-#前向传播
-def forward(network,inputs):
-
-    inputs = inputs.flatten()
-    #inputs = inputs.astype('float32')
-
-    #给输入分通道
-    inputs_channels = np.zeros((3,x,y), dtype = int)
-    for i in range(15):
-        for j in range(15):
-            
-            if inputs[i * 15 + j] == 1:
-                inputs_channels[0][i][j] = 1 #黑棋
-
-            if inputs[i * 15 + j] == -1:
-                inputs_channels[1][i][j] = 1 #白棋
-
-            if inputs[i * 15 + j] == 0:
-                inputs_channels[2][i][j] = 1 #空
-                
-    inputs_channels = inputs_channels.astype('float32')
-    
-    inputs_tensor = torch.from_numpy(inputs_channels)
-    inputs_tensor = inputs_tensor.to(device)
-    outputs = network(inputs_tensor)
-    return outputs
-"""
 #模型初始化
 model = net()
 
@@ -511,43 +371,21 @@ if os.path.isfile("model.pth") == False:
 model = torch.load("model.pth")
 model = model.to(device)
 
-#目标值
-#targets = np.array([1], dtype='float32')
-#targets_tensor = torch.from_numpy(targets)
-
 #损失函数，MSELoss为均方误差损失
 loss_function = nn.MSELoss()
 
-#损失函数，L1Loss为范数损失
-#loss_function = nn.L1Loss()
-
-#SGD（随机梯度下降法）优化器，lr为学习率
-#optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-
-#AdamW优化器
-#optimizer = torch.optim.AdamW(model.parameters())
-
 def train():
-
+    
     global targets,model_copy,bwin,wwin,draw,avgloss,maxvalue
-
-    #复制模型用于训练
-    model_copy = net()
-    model_copy = copy.deepcopy(model)
-    model_copy = model_copy.to(device)
-
+    
     #AdamW优化器
     optimizer = torch.optim.AdamW(model_copy.parameters())
     
     #打乱数据索引
     shufflelist = np.random.permutation(np.arange(0,s.shape[0]))
-
-    #使用下一步进行训练（最后一步不进行训练）
-    for i in range(s.shape[0] - 1):
-
-        #最后一步
-        if shufflelist[i] == s.shape[0] - 1:
-            continue
+    
+    #使用下一步进行训练
+    for i in range(s.shape[0]):
         
         inputs = s[shufflelist[i],:,:]
         inputs = inputs.flatten()
@@ -555,30 +393,35 @@ def train():
         inputs_tensor = torch.from_numpy(inputs)
 
         #下一步的奖励r
-        #黑胜，前两步的白棋负奖励
-        if bwin == True and shufflelist[i] == s.shape[0] - 3:
-            reward = -0.09
         #黑胜，前一步的黑棋正奖励
-        if bwin == True and shufflelist[i] == s.shape[0] - 2:
-            reward = 0.1
-        #白胜，前两步的黑棋负奖励
-        if wwin == True and shufflelist[i] == s.shape[0] - 3:
-            reward = -0.09
+        if bwin == True and shufflelist[i] == s.shape[0] - 1:
+            reward = 1
         #白胜，前一步的白棋正奖励
-        if wwin == True and shufflelist[i] == s.shape[0] - 2:
-            reward = 0.1
+        if wwin == True and shufflelist[i] == s.shape[0] - 1:
+            reward = -1
         else:
             reward = 0
             
         #惩罚系数γ
         gamma = -0.9
-
+        
         #目标
         targets = np.array([0])
-        targets[0] = maxvalue[shufflelist[i]+1] * gamma + reward
+        
+        #黑胜，前两步的白棋负价值
+        if bwin == True and shufflelist[i] == s.shape[0] - 2:
+            targets[0] = 0.9
+        #白胜，前两步的黑棋负价值
+        elif wwin == True and shufflelist[i] == s.shape[0] - 2:
+            targets[0] = -0.9
+        #最后一步无下一步最大价值
+        elif shufflelist[i] == s.shape[0] - 1:
+            targets[0] = reward
+        else:
+            targets[0] = maxvalue[shufflelist[i]+1] * gamma + reward
+            
         targets = targets.astype('float32')
         targets = torch.from_numpy(targets).cuda()
-        #targets = torch.max(model.forward(s[shufflelist[i]+1,:,:])) * gamma + reward
         
         #计算损失
         outputs = model_copy.forward(inputs)
@@ -595,7 +438,7 @@ def train():
         
         #print("loss:",loss)
         avgloss += float(loss)
-
+        
 #训练次数
 for k in range(1):
     
@@ -604,20 +447,23 @@ for k in range(1):
     model = torch.load("model.pth")
     model = model.to(device)
     
+    #复制模型用于训练
+    model_copy = net()
+    model_copy = copy.deepcopy(model)
+    model_copy = model_copy.to(device)
+    
     for m in range(size):
         
         #状态空间s（每一手棋盘的记录）
         s = np.zeros((x*y,x,y), dtype = int)
-    
+        
         #动作空间a（当前落子位置的记录）
         a = np.zeros((x*y,2), dtype = int)
-
+        
         #最大价值
         maxvalue = np.zeros((x*y), dtype = 'float32')
         maxposx = np.zeros((x*y), dtype = 'int')
         maxposy = np.zeros((x*y), dtype = 'int')
-        
-        totalmove = 0
         
         for i in range(1):
             if windows_visible == True:
@@ -637,12 +483,12 @@ for k in range(1):
         for i in range(1):
             train()
             
-        print("training is finished")
+        print()
         
-        avgloss /= s.shape[0] - 1
-        
-        torch.save(model_copy, "model.pth")
-        
+    torch.save(model_copy, "model.pth")
+    print("training is finished")
+    
+    avgloss /= s.shape[0] * size
     if avgloss >= 0.0001:
         print("avgloss:","%0.6f"%avgloss)
     else:
