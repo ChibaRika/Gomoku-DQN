@@ -3,8 +3,9 @@ from torch import nn
 import numpy as np
 import copy
 import os
-
 import random
+import matplotlib.pylab as plt
+
 from graphics import *
 import pyautogui
 
@@ -17,6 +18,11 @@ y = 15
 #单次训练局数（更新网络局数）
 size = 10
 
+#更新网络次数
+upgrade = 10
+
+avgloss = np.zeros((upgrade))
+
 #是否显示自对弈窗口
 windows_visible = True
 
@@ -26,7 +32,7 @@ print("device:",device)
 #变量初始化
 def variable_initialization():
     
-    global move,chessboard,s,a,bwin,wwin,draw,avgloss
+    global move,chessboard,s,a,bwin,wwin,draw
     
     #初始化棋盘 __=0 ○=-1 ●=1
     chessboard = np.zeros((x,y), dtype = int)
@@ -35,8 +41,6 @@ def variable_initialization():
     bwin = False
     wwin = False
     draw = False
-
-    avgloss = 0
     
 #GUI窗口
 def windows():
@@ -373,7 +377,7 @@ loss_function = nn.MSELoss()
 
 def train():
     
-    global targets,model_copy,bwin,wwin,draw,avgloss,maxvalue
+    global targets,model_copy,bwin,wwin,draw,totalloss,maxvalue
     
     #AdamW优化器
     optimizer = torch.optim.AdamW(model_copy.parameters())
@@ -439,12 +443,11 @@ def train():
         optimizer.step()
         
         #print("loss:",loss)
-        avgloss += float(loss)
+        totalloss += float(loss)
         
-#训练次数
-for k in range(1):
+for k in range(upgrade):
     
-    avgloss = 0
+    totalloss = 0
     
     model = torch.load("model.pth")
     model = model.to(device)
@@ -472,7 +475,9 @@ for k in range(1):
                 windows()
             variable_initialization()
             play()
-            
+            if windows_visible == True:
+                win.close()
+                
         #删除数据为0的部分
         for i in range(225):
             
@@ -489,10 +494,17 @@ for k in range(1):
         
     torch.save(model_copy, "model.pth")
     print("training is finished")
-    
-    avgloss /= s.shape[0] * size
-    if avgloss >= 0.0001:
-        print("avgloss:","%0.6f"%avgloss)
+    print()
+
+    avgloss[k] = totalloss / (s.shape[0] * size)
+    if avgloss[k] >= 0.0001:
+        print("avgloss:","%0.6f"%avgloss[k])
     else:
-        print("avgloss:","%0.6e"%avgloss)
-        
+        print("avgloss:","%0.6e"%avgloss[k])
+    print()
+    
+plt.plot(range(0,upgrade * size,size),avgloss)
+plt.yscale('log')
+plt.xlabel("training times")
+plt.ylabel("avgloss")
+plt.show()
