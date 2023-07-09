@@ -400,7 +400,7 @@ def train():
             reward = 0
             
         #惩罚系数γ
-        gamma = 0.9
+        gamma = -0.9
         
         #目标
         targets = np.array([0])
