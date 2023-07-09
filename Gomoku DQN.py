@@ -42,13 +42,13 @@ def variable_initialization():
 def windows():
     
     global win
-
+    
     #绘制窗口
     win = GraphWin("Gomoku",1200,1200)
     win.setBackground(color_rgb(227,188,116))
     
     linex = liney = 75
-
+    
     #绘制棋盘网格
     while linex < 1126:
         line = Line(Point(linex,75),Point(linex,1126))
@@ -59,7 +59,7 @@ def windows():
         line = Line(Point(75,liney),Point(1126,liney))
         line.draw(win)
         liney += 75
-
+        
     #绘制天元
     tianyuan = Circle(Point(7 * 75 + 75, 7 * 75 + 75),8)
     tianyuan.setFill("black")
@@ -90,7 +90,7 @@ def aimove():
     
     for i in range(15):
         for j in range(15):
-
+            
             if chessboard[i][j] != 0:
                 continue
             
@@ -103,19 +103,16 @@ def aimove():
             values = values.cpu().detach().numpy()
             #随机化每步
             values += random.randint(-10,10) / 1000
+
+            if move % 2 == 1:
+                values *= -1
             
             if firstvalue == True:
                 maxvalue[move] = values
                 firstvalue = False
 
-            #黑棋寻找最大价值位置落子
-            if move % 2 == 0 and values >= maxvalue[move]:
-                maxvalue[move] = values
-                maxposx[move] = i
-                maxposy[move] = j
-
-            #白棋寻找最小价值位置落子
-            if move % 2 == 1 and values <= maxvalue[move]:
+            #寻找最大价值位置落子
+            if values >= maxvalue[move]:
                 maxvalue[move] = values
                 maxposx[move] = i
                 maxposy[move] = j
@@ -152,8 +149,8 @@ def aimove():
             s[move][i][j] = chessboard[i][j]
             a[move][0] = posx
             a[move][1] = posy
-
-    print(maxvalue[move])
+            
+    print("value:",maxvalue[move])
     
     if move % 2 == 0:
         winjudgement(1,posx,posy)
@@ -297,7 +294,7 @@ class net(nn.Module):
         self.layer1 = nn.Conv2d(in_channels=3, out_channels=64, stride=1, kernel_size=5, padding=2)
         
         self.layer2 = nn.ReLU()
-
+        
         self.layer3 = nn.MaxPool2d(kernel_size=2, stride=2)
         
         self.layer4 = nn.Conv2d(in_channels=64, out_channels=128, stride=1, kernel_size=5, padding=2)
@@ -311,17 +308,17 @@ class net(nn.Module):
         self.layer8 = nn.ReLU()
         
         self.layer9 = nn.Flatten(start_dim=0, end_dim=3)
-
+        
         self.layer10 = nn.Linear(in_features=2304, out_features=48)
-
+        
         self.layer11 = nn.ReLU()
-
+        
         self.layer12 = nn.Linear(in_features=48, out_features=1)
-
+        
         self.layer13 = nn.Tanh()
-
+        
     def forward(self,inputs):
-
+        
         global x,y
         
         inputs = inputs.flatten()
@@ -391,30 +388,31 @@ def train():
         inputs = inputs.flatten()
         inputs = inputs.astype('float32')
         inputs_tensor = torch.from_numpy(inputs)
-
+        
         #下一步的奖励r
         #黑胜，前一步的黑棋正奖励
         if bwin == True and shufflelist[i] == s.shape[0] - 1:
             reward = 1
         #白胜，前一步的白棋正奖励
         if wwin == True and shufflelist[i] == s.shape[0] - 1:
-            reward = -1
+            reward = 1
         else:
             reward = 0
             
         #惩罚系数γ
-        gamma = -0.9
+        gamma = 0.9
         
         #目标
         targets = np.array([0])
         
         #黑胜，前两步的白棋负价值
         if bwin == True and shufflelist[i] == s.shape[0] - 2:
-            targets[0] = 0.9
+            targets[0] = -0.9
         #白胜，前两步的黑棋负价值
         elif wwin == True and shufflelist[i] == s.shape[0] - 2:
             targets[0] = -0.9
-        #最后一步无下一步最大价值
+            
+        #最后一步targets = reward
         elif shufflelist[i] == s.shape[0] - 1:
             targets[0] = reward
         else:
@@ -425,6 +423,10 @@ def train():
         
         #计算损失
         outputs = model_copy.forward(inputs)
+        
+        if shufflelist[i] % 2 == 1:
+            outputs = torch.mul(outputs,-1)
+            
         loss = loss_function(outputs,targets)
         
         #优化器调节梯度为0
