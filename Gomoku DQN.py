@@ -107,7 +107,7 @@ def aimove():
             values = values.cpu().detach().numpy()
             #随机化每步
             values += random.randint(-10,10) / 1000
-
+            
             if move % 2 == 1:
                 values *= -1
             
@@ -313,14 +313,20 @@ class net(nn.Module):
         
         self.layer9 = nn.Flatten(start_dim=0, end_dim=3)
         
-        self.layer10 = nn.Linear(in_features=2304, out_features=48)
+        self.layer10 = nn.Linear(in_features=2304, out_features=512)
         
         self.layer11 = nn.ReLU()
         
-        self.layer12 = nn.Linear(in_features=48, out_features=1)
+        self.layer12 = nn.Linear(in_features=512, out_features=1)
         
         self.layer13 = nn.Tanh()
-        
+
+        #He初始化
+        for layer in self.modules():
+            if isinstance(layer, nn.Linear):
+                nn.init.kaiming_uniform_(layer.weight, nonlinearity='relu')
+                nn.init.constant_(layer.bias, 0)
+                
     def forward(self,inputs):
         
         global x,y
