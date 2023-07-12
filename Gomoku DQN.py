@@ -106,15 +106,15 @@ def aimove():
             values = model.forward(chessboard)
             values = values.cpu().detach().numpy()
             #随机化每步
-            values += random.randint(-10,10) / 1000
+            values += random.randint(-5,5) / 1000
             
             if move % 2 == 1:
                 values *= -1
-            
+                
             if firstvalue == True:
                 maxvalue[move] = values
                 firstvalue = False
-
+                
             #寻找最大价值位置落子
             if values >= maxvalue[move]:
                 maxvalue[move] = values
@@ -165,7 +165,7 @@ def aimove():
     #绘制棋子
     if windows_visible == True:
         piece.draw(win)
-    
+        
     #手数+1
     move += 1
     
@@ -173,7 +173,7 @@ def aimove():
     if windows_visible == True:
         if "newpiece" in globals():
             newpiece.undraw()
-        
+            
         newpiece = Polygon(Point(posx * 75 + 75, posy * 75 + 75), \
                            Point(posx * 75 + 75 + 30, posy * 75 + 75), \
                            Point(posx * 75 + 75, posy * 75 + 75 + 30))
@@ -186,17 +186,17 @@ def aimove():
         
 #胜利判断
 def winjudgement(chess,movex,movey):
-
+    
     global move,bwin,wwin,draw
-
+    
     for i in range(5): #横向
-
+        
         if movey-4+i < 0:
             continue
-
+        
         if movey+i > 14:
             break
-            
+        
         if chessboard[movex][movey-4+i] == chess and \
             chessboard[movex][movey-3+i] == chess and \
             chessboard[movex][movey-2+i] == chess and \
@@ -212,13 +212,13 @@ def winjudgement(chess,movex,movey):
                 return
             
     for i in range(5): #纵向
-
+        
         if movex-4+i < 0:
             continue
-
+        
         if movex+i > 14:
             break
-
+        
         if chessboard[movex-4+i][movey] == chess and \
             chessboard[movex-3+i][movey] == chess and \
             chessboard[movex-2+i][movey] == chess and \
@@ -232,12 +232,12 @@ def winjudgement(chess,movex,movey):
                 wwin = True
                 #print("White Win!")
                 return
-
+            
     for i in range(5): #斜向，左上到右下
-
+        
         if movex-4+i < 0 or movey-4+i < 0:
             continue
-
+        
         if movex+i > 14 or movey+i > 14:
             break
         
@@ -254,12 +254,12 @@ def winjudgement(chess,movex,movey):
                 wwin = True
                 #print("White Win!")
                 return
-
+            
     for i in range(5): #斜向，右上到左下
-
+        
         if movex-4+i < 0 or movey+4-i > 14:
             continue
-
+        
         if movex+i > 14 or movey-i < 0:
             break
         
@@ -295,32 +295,36 @@ class net(nn.Module):
     def __init__(self):
         super(net,self).__init__()
         
-        self.layer1 = nn.Conv2d(in_channels=3, out_channels=64, stride=1, kernel_size=5, padding=2)
+        self.layer1 = nn.Conv2d(in_channels=3, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer2 = nn.ReLU()
+        self.layer2 = torch.nn.BatchNorm2d(256)
         
-        self.layer3 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.layer3 = nn.ReLU()
         
-        self.layer4 = nn.Conv2d(in_channels=64, out_channels=128, stride=1, kernel_size=5, padding=2)
+        self.layer4 = nn.MaxPool2d(kernel_size=2, stride=2)
         
-        self.layer5 = nn.ReLU()
+        self.layer5 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer6 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.layer6 = torch.nn.BatchNorm2d(256)
         
-        self.layer7 = nn.Conv2d(in_channels=128, out_channels=256, stride=1, kernel_size=5, padding=2)
+        self.layer7 = nn.ReLU()
         
-        self.layer8 = nn.ReLU()
+        self.layer8 = nn.MaxPool2d(kernel_size=2, stride=2)
         
-        self.layer9 = nn.Flatten(start_dim=0, end_dim=3)
+        self.layer9 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer10 = nn.Linear(in_features=2304, out_features=512)
+        self.layer10 = torch.nn.BatchNorm2d(256)
         
         self.layer11 = nn.ReLU()
         
-        self.layer12 = nn.Linear(in_features=512, out_features=1)
+        self.layer12 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer13 = nn.Tanh()
-
+        self.layer13 = torch.nn.BatchNorm2d(256)
+        
+        self.layer14 = nn.ReLU()
+        
+        self.layer15 = nn.Tanh()
+        
         #He初始化
         for layer in self.modules():
             if isinstance(layer, nn.Linear):
@@ -365,7 +369,10 @@ class net(nn.Module):
         mid = self.layer10(mid)
         mid = self.layer11(mid)
         mid = self.layer12(mid)
-        outputs = self.layer13(mid)
+        mid = self.layer13(mid)
+        mid = self.layer14(mid)
+        mid = torch.mean(mid,[1,2,3])
+        outputs = self.layer15(mid)
         return outputs
     
 #模型初始化
@@ -413,7 +420,7 @@ def train():
         gamma = -0.9
         
         #目标
-        targets = np.array([0])
+        targets = np.array([0], dtype = 'float32')
         
         #黑胜，前两步的白棋负价值
         if bwin == True and shufflelist[i] == s.shape[0] - 2:
@@ -423,12 +430,11 @@ def train():
             targets[0] = -0.9
             
         #最后一步targets = reward
-        elif shufflelist[i] == s.shape[0] - 1:
+        if shufflelist[i] == s.shape[0] - 1:
             targets[0] = reward
         else:
             targets[0] = maxvalue[shufflelist[i]+1] * gamma + reward
             
-        targets = targets.astype('float32')
         targets = torch.from_numpy(targets).cuda()
         
         #计算损失
@@ -438,6 +444,9 @@ def train():
             outputs = torch.mul(outputs,-1)
             
         loss = loss_function(outputs,targets)
+        
+        #print("outputs:",outputs)
+        #print("targets:",targets)
         
         #优化器调节梯度为0
         optimizer.zero_grad()
@@ -501,7 +510,7 @@ for k in range(upgrade):
     torch.save(model_copy, "model.pth")
     print("training is finished")
     print()
-
+    
     avgloss[k] = totalloss / (s.shape[0] * size)
     if avgloss[k] >= 0.0001:
         print("avgloss:","%0.6f"%avgloss[k])
