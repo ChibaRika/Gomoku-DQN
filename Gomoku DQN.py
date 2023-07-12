@@ -411,7 +411,7 @@ def train():
         if bwin == True and shufflelist[i] == s.shape[0] - 1:
             reward = 1
         #白胜，前一步的白棋正奖励
-        if wwin == True and shufflelist[i] == s.shape[0] - 1:
+        elif wwin == True and shufflelist[i] == s.shape[0] - 1:
             reward = 1
         else:
             reward = 0
@@ -430,7 +430,7 @@ def train():
             targets[0] = -0.9
             
         #最后一步targets = reward
-        if shufflelist[i] == s.shape[0] - 1:
+        elif shufflelist[i] == s.shape[0] - 1:
             targets[0] = reward
         else:
             targets[0] = maxvalue[shufflelist[i]+1] * gamma + reward
