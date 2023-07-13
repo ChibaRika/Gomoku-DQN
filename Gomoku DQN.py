@@ -22,6 +22,7 @@ size = 10
 upgrade = 10
 
 avgloss = np.zeros((upgrade))
+avgstep = np.zeros((upgrade))
 
 #是否显示自对弈窗口
 windows_visible = True
@@ -463,6 +464,7 @@ def train():
 for k in range(upgrade):
     
     totalloss = 0
+    totalstep = 0
     
     model = torch.load("model.pth")
     model = model.to(device)
@@ -506,20 +508,31 @@ for k in range(upgrade):
             train()
             
         print()
+        totalstep += s.shape[0]
         
     torch.save(model_copy, "model.pth")
     print("training is finished")
     print()
     
-    avgloss[k] = totalloss / (s.shape[0] * size)
+    avgloss[k] = totalloss / totalstep
     if avgloss[k] >= 0.0001:
         print("avgloss:","%0.6f"%avgloss[k])
     else:
         print("avgloss:","%0.6e"%avgloss[k])
+        
+    avgstep[k] = totalstep / size
+    print("avgstep:","%0.4f"%avgstep[k])
     print()
     
+plt.subplot(1, 2, 1)
 plt.plot(range(0,upgrade * size,size),avgloss)
 plt.yscale('log')
 plt.xlabel("training times")
 plt.ylabel("avgloss")
+
+plt.subplot(1, 2, 2)
+plt.plot(range(0,upgrade * size,size),avgstep)
+plt.xlabel("training times")
+plt.ylabel("avgstep")
+
 plt.show()
