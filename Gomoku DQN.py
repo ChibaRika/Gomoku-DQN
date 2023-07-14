@@ -93,59 +93,100 @@ def aimove():
     
     firstvalue = True
     
-    for i in range(15):
-        for j in range(15):
+    #epsilon-greedy策略
+    seed = random.randint(1,10)
+    
+    if seed <= 3:
+        
+        for i in range(100000):
             
-            if chessboard[i][j] != 0:
+            posx = random.randint(0,x-1)
+            posy = random.randint(0,y-1)
+            
+            if chessboard[posx][posy] != 0:
                 continue
             
-            if move % 2 == 0 and chessboard[i][j] == 0:
-                chessboard[i][j] = 1
-            if move % 2 == 1 and chessboard[i][j] == 0:
-                chessboard[i][j] = -1
+            print("random step")
+            
+            if move % 2 == 0:
+                chessboard[posx][posy] = 1
                 
-            values = model.forward(chessboard)
-            values = values.cpu().detach().numpy()
-            #随机化每步
-            values += random.randint(-5,5) / 1000
+                values = model.forward(chessboard)
+                values = values.cpu().detach().numpy()
+                maxvalue[move] = values
+                
+                if windows_visible == True:
+                    piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
+                    piece.setFill("black")
+                    
+                break
             
             if move % 2 == 1:
-                values *= -1
+                chessboard[posx][posy] = -1
                 
-            if firstvalue == True:
+                values = model.forward(chessboard)
+                values = values.cpu().detach().numpy()
                 maxvalue[move] = values
-                firstvalue = False
                 
-            #寻找最大价值位置落子
-            if values >= maxvalue[move]:
-                maxvalue[move] = values
-                maxposx[move] = i
-                maxposy[move] = j
+                if windows_visible == True:
+                    piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
+                    piece.setFill("white")
+                    
+                break
+            
+    else:
+        
+        for i in range(x):
+            for j in range(y):
                 
-            chessboard[i][j] = 0
+                if chessboard[i][j] != 0:
+                    continue
+                
+                if move % 2 == 0 and chessboard[i][j] == 0:
+                    chessboard[i][j] = 1
+                if move % 2 == 1 and chessboard[i][j] == 0:
+                    chessboard[i][j] = -1
+                    
+                values = model.forward(chessboard)
+                values = values.cpu().detach().numpy()
+                
+                if move % 2 == 1:
+                    values *= -1
+                    
+                if firstvalue == True:
+                    maxvalue[move] = values
+                    firstvalue = False
+                    
+                #寻找最大价值位置落子
+                if values >= maxvalue[move]:
+                    maxvalue[move] = values
+                    maxposx[move] = i
+                    maxposy[move] = j
+                    
+                chessboard[i][j] = 0
+                
+        if move % 2 == 0:
             
-    if move % 2 == 0:
-        
-        posx = maxposx[move]
-        posy = maxposy[move]
-        
-        chessboard[posx][posy] = 1
-        
-        if windows_visible == True:
-            piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
-            piece.setFill("black")
+            posx = maxposx[move]
+            posy = maxposy[move]
             
-    if move % 2 == 1:
-        
-        posx = maxposx[move]
-        posy = maxposy[move]
-        
-        chessboard[posx][posy] = -1
-        
-        if windows_visible == True:
-            piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
-            piece.setFill("white")
+            chessboard[posx][posy] = 1
             
+            if windows_visible == True:
+                piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
+                piece.setFill("black")
+                
+        if move % 2 == 1:
+            
+            posx = maxposx[move]
+            posy = maxposy[move]
+            
+            chessboard[posx][posy] = -1
+            
+            if windows_visible == True:
+                piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
+                piece.setFill("white")
+                
     #记录s,a
     for i in range(x):
         
@@ -310,21 +351,25 @@ class net(nn.Module):
         
         self.layer7 = nn.ReLU()
         
-        self.layer8 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.layer8 = nn.MaxPool2d(kernel_size=2, stride=1)
         
         self.layer9 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
         self.layer10 = torch.nn.GroupNorm(32,256)
         
         self.layer11 = nn.ReLU()
+
+        self.layer12 = nn.MaxPool2d(kernel_size=2, stride=1)
         
-        self.layer12 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
+        self.layer13 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer13 = torch.nn.GroupNorm(32,256)
+        self.layer14 = torch.nn.GroupNorm(32,256)
         
-        self.layer14 = nn.ReLU()
+        self.layer15 = nn.ReLU()
+
+        self.layer16 = nn.Linear(in_features=256, out_features=1)
         
-        self.layer15 = nn.Tanh()
+        self.layer17 = nn.Tanh()
         
         #He初始化
         for layer in self.modules():
@@ -372,8 +417,10 @@ class net(nn.Module):
         mid = self.layer12(mid)
         mid = self.layer13(mid)
         mid = self.layer14(mid)
-        mid = torch.mean(mid,[1,2,3])
-        outputs = self.layer15(mid)
+        mid = self.layer15(mid)
+        mid = torch.mean(mid,[2,3])
+        mid = self.layer16(mid)
+        outputs = self.layer17(mid)
         return outputs
     
 #模型初始化
