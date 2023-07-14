@@ -298,7 +298,7 @@ class net(nn.Module):
         
         self.layer1 = nn.Conv2d(in_channels=3, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer2 = torch.nn.BatchNorm2d(256)
+        self.layer2 = torch.nn.GroupNorm(32,256)
         
         self.layer3 = nn.ReLU()
         
@@ -306,7 +306,7 @@ class net(nn.Module):
         
         self.layer5 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer6 = torch.nn.BatchNorm2d(256)
+        self.layer6 = torch.nn.GroupNorm(32,256)
         
         self.layer7 = nn.ReLU()
         
@@ -314,13 +314,13 @@ class net(nn.Module):
         
         self.layer9 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer10 = torch.nn.BatchNorm2d(256)
+        self.layer10 = torch.nn.GroupNorm(32,256)
         
         self.layer11 = nn.ReLU()
         
         self.layer12 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer13 = torch.nn.BatchNorm2d(256)
+        self.layer13 = torch.nn.GroupNorm(32,256)
         
         self.layer14 = nn.ReLU()
         
