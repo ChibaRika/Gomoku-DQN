@@ -126,6 +126,7 @@ def aimove():
                 
                 values = model.forward(chessboard)
                 values = values.cpu().detach().numpy()
+                values *= -1
                 maxvalue[move] = values
                 
                 if windows_visible == True:
@@ -351,25 +352,21 @@ class net(nn.Module):
         
         self.layer7 = nn.ReLU()
         
-        self.layer8 = nn.MaxPool2d(kernel_size=2, stride=1)
+        self.layer8 = nn.MaxPool2d(kernel_size=2, stride=2)
         
         self.layer9 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
         self.layer10 = torch.nn.GroupNorm(32,256)
         
         self.layer11 = nn.ReLU()
-
-        self.layer12 = nn.MaxPool2d(kernel_size=2, stride=1)
         
-        self.layer13 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
+        self.layer12 = nn.Linear(in_features=256, out_features=128)
         
-        self.layer14 = torch.nn.GroupNorm(32,256)
+        self.layer13 = nn.ReLU()
         
-        self.layer15 = nn.ReLU()
-
-        self.layer16 = nn.Linear(in_features=256, out_features=1)
+        self.layer14 = nn.Linear(in_features=128, out_features=1)
         
-        self.layer17 = nn.Tanh()
+        self.layer15 = nn.Tanh()
         
         #He初始化
         for layer in self.modules():
@@ -414,13 +411,11 @@ class net(nn.Module):
         mid = self.layer9(mid)
         mid = self.layer10(mid)
         mid = self.layer11(mid)
+        mid = torch.mean(mid,[2,3])
         mid = self.layer12(mid)
         mid = self.layer13(mid)
         mid = self.layer14(mid)
-        mid = self.layer15(mid)
-        mid = torch.mean(mid,[2,3])
-        mid = self.layer16(mid)
-        outputs = self.layer17(mid)
+        outputs = self.layer15(mid)
         return outputs
     
 #模型初始化
