@@ -96,6 +96,35 @@ def aimove():
     #epsilon-greedy策略
     seed = random.randint(1,10)
     
+    for i in range(x):
+        for j in range(y):
+            
+            if chessboard[i][j] != 0:
+                continue
+            
+            if move % 2 == 0 and chessboard[i][j] == 0:
+                chessboard[i][j] = 1
+            if move % 2 == 1 and chessboard[i][j] == 0:
+                chessboard[i][j] = -1
+                
+            values = model.forward(chessboard)
+            values = values.cpu().detach().numpy()
+            
+            if move % 2 == 1:
+                values *= -1
+                
+            if firstvalue == True:
+                maxvalue[move] = values
+                firstvalue = False
+                
+            #寻找最大价值位置落子
+            if values >= maxvalue[move]:
+                maxvalue[move] = values
+                maxposx[move] = i
+                maxposy[move] = j
+                
+            chessboard[i][j] = 0
+            
     if seed <= 3:
         
         for i in range(100000):
@@ -103,91 +132,34 @@ def aimove():
             posx = random.randint(0,x-1)
             posy = random.randint(0,y-1)
             
-            if chessboard[posx][posy] != 0:
-                continue
-            
-            print("random step")
-            
-            if move % 2 == 0:
-                chessboard[posx][posy] = 1
-                
-                values = model.forward(chessboard)
-                values = values.cpu().detach().numpy()
-                maxvalue[move] = values
-                
-                if windows_visible == True:
-                    piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
-                    piece.setFill("black")
-                    
+            if chessboard[posx][posy] == 0:
+                print("random step")
                 break
             
-            if move % 2 == 1:
-                chessboard[posx][posy] = -1
-                
-                values = model.forward(chessboard)
-                values = values.cpu().detach().numpy()
-                values *= -1
-                maxvalue[move] = values
-                
-                if windows_visible == True:
-                    piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
-                    piece.setFill("white")
-                    
-                break
-            
-    else:
+    if move % 2 == 0:
         
-        for i in range(x):
-            for j in range(y):
-                
-                if chessboard[i][j] != 0:
-                    continue
-                
-                if move % 2 == 0 and chessboard[i][j] == 0:
-                    chessboard[i][j] = 1
-                if move % 2 == 1 and chessboard[i][j] == 0:
-                    chessboard[i][j] = -1
-                    
-                values = model.forward(chessboard)
-                values = values.cpu().detach().numpy()
-                
-                if move % 2 == 1:
-                    values *= -1
-                    
-                if firstvalue == True:
-                    maxvalue[move] = values
-                    firstvalue = False
-                    
-                #寻找最大价值位置落子
-                if values >= maxvalue[move]:
-                    maxvalue[move] = values
-                    maxposx[move] = i
-                    maxposy[move] = j
-                    
-                chessboard[i][j] = 0
-                
-        if move % 2 == 0:
-            
+        if seed > 3:
             posx = maxposx[move]
             posy = maxposy[move]
             
-            chessboard[posx][posy] = 1
+        chessboard[posx][posy] = 1
+        
+        if windows_visible == True:
+            piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
+            piece.setFill("black")
             
-            if windows_visible == True:
-                piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
-                piece.setFill("black")
-                
-        if move % 2 == 1:
-            
+    if move % 2 == 1:
+        
+        if seed > 3:
             posx = maxposx[move]
             posy = maxposy[move]
             
-            chessboard[posx][posy] = -1
+        chessboard[posx][posy] = -1
+        
+        if windows_visible == True:
+            piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
+            piece.setFill("white")
             
-            if windows_visible == True:
-                piece = Circle(Point(posx * 75 + 75, posy * 75 + 75),30)
-                piece.setFill("white")
-                
     #记录s,a
     for i in range(x):
         
