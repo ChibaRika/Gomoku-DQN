@@ -102,9 +102,9 @@ def aimove():
             if chessboard[i][j] != 0:
                 continue
             
-            if move % 2 == 0 and chessboard[i][j] == 0:
+            if move % 2 == 0:
                 chessboard[i][j] = 1
-            if move % 2 == 1 and chessboard[i][j] == 0:
+            if move % 2 == 1:
                 chessboard[i][j] = -1
                 
             values = model.forward(chessboard)
@@ -136,12 +136,13 @@ def aimove():
                 print("random step")
                 break
             
-    if move % 2 == 0:
+    if seed > 3:
         
-        if seed > 3:
             posx = maxposx[move]
             posy = maxposy[move]
             
+    if move % 2 == 0:
+        
         chessboard[posx][posy] = 1
         
         if windows_visible == True:
@@ -150,10 +151,6 @@ def aimove():
             
     if move % 2 == 1:
         
-        if seed > 3:
-            posx = maxposx[move]
-            posy = maxposy[move]
-            
         chessboard[posx][posy] = -1
         
         if windows_visible == True:
@@ -310,40 +307,60 @@ class net(nn.Module):
     def __init__(self):
         super(net,self).__init__()
         
+        #输入模块
         self.layer1 = nn.Conv2d(in_channels=3, out_channels=256, stride=1, kernel_size=5, padding=2)
         
         self.layer2 = torch.nn.GroupNorm(32,256)
         
         self.layer3 = nn.ReLU()
         
-        self.layer4 = nn.MaxPool2d(kernel_size=2, stride=2)
+        #残差模块1
+        self.layer4 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer5 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
+        self.layer5 = torch.nn.GroupNorm(32,256)
         
-        self.layer6 = torch.nn.GroupNorm(32,256)
+        self.layer6 = nn.ReLU()
         
-        self.layer7 = nn.ReLU()
+        self.layer7 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer8 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.layer8 = torch.nn.GroupNorm(32,256)
         
+        #残差模块2
         self.layer9 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
         self.layer10 = torch.nn.GroupNorm(32,256)
         
         self.layer11 = nn.ReLU()
         
-        self.layer12 = nn.Linear(in_features=256, out_features=128)
+        self.layer12 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer13 = nn.ReLU()
+        self.layer13 = torch.nn.GroupNorm(32,256)
         
-        self.layer14 = nn.Linear(in_features=128, out_features=1)
         
-        self.layer15 = nn.Tanh()
+        self.layer14 = nn.ReLU()
         
-        #He初始化
+        
+        #价值头
+        self.layer15 = nn.Conv2d(in_channels=256, out_channels=1, stride=1, kernel_size=1, padding=0)
+        
+        self.layer16 = torch.nn.GroupNorm(1,1)
+        
+        self.layer17 = nn.ReLU()
+        
+        self.layer18 = nn.Flatten(start_dim=0, end_dim=3)
+        
+        self.layer19 = nn.Linear(in_features=225, out_features=128)
+        
+        self.layer20 = nn.ReLU()
+        
+        self.layer21 = nn.Linear(in_features=128, out_features=1)
+        
+        self.layer22 = nn.Tanh()
+        
+        #He正态分布初始化
         for layer in self.modules():
-            if isinstance(layer, nn.Linear):
-                nn.init.kaiming_uniform_(layer.weight, nonlinearity='relu')
+            if isinstance(layer, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_normal_(layer.weight, nonlinearity='relu')
                 nn.init.constant_(layer.bias, 0)
                 
     def forward(self,inputs):
@@ -383,11 +400,17 @@ class net(nn.Module):
         mid = self.layer9(mid)
         mid = self.layer10(mid)
         mid = self.layer11(mid)
-        mid = torch.mean(mid,[2,3])
         mid = self.layer12(mid)
         mid = self.layer13(mid)
         mid = self.layer14(mid)
-        outputs = self.layer15(mid)
+        mid = self.layer15(mid)
+        mid = self.layer16(mid)
+        mid = self.layer17(mid)
+        mid = self.layer18(mid)
+        mid = self.layer19(mid)
+        mid = self.layer20(mid)
+        mid = self.layer21(mid)
+        outputs = self.layer22(mid)
         return outputs
     
 #模型初始化
