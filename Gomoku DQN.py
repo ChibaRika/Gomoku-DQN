@@ -89,7 +89,7 @@ def windows():
     
 def aimove():
     
-    global win,move,chessboard,newpiece,x,y,windows_visible,maxvalue,maxposx,maxposy
+    global win,move,totalmove,chessboard,newpiece,x,y,windows_visible,maxvalue,maxposx,maxposy
     
     firstvalue = True
     
@@ -107,19 +107,19 @@ def aimove():
             if move % 2 == 1:
                 chessboard[i][j] = -1
                 
-            values = model.forward(chessboard)
+            if move == 0:
+                values = model.forward(chessboard,-1,-1)
+            else:
+                values = model.forward(chessboard,a[totalmove - 1][0],a[totalmove - 1][1])
             values = values.cpu().detach().numpy()
             
-            if move % 2 == 1:
-                values *= -1
-                
             if firstvalue == True:
-                maxvalue[move] = values
+                maxvalue[totalmove] = values
                 firstvalue = False
                 
             #寻找最大价值位置落子
-            if values >= maxvalue[move]:
-                maxvalue[move] = values
+            if values >= maxvalue[totalmove]:
+                maxvalue[totalmove] = values
                 maxposx[move] = i
                 maxposy[move] = j
                 
@@ -162,11 +162,11 @@ def aimove():
         
         for j in range(y):
             
-            s[move][i][j] = chessboard[i][j]
-            a[move][0] = posx
-            a[move][1] = posy
+            s[totalmove][i][j] = chessboard[i][j]
+            a[totalmove][0] = posx
+            a[totalmove][1] = posy
             
-    print("value:",maxvalue[move])
+    print("value:",maxvalue[totalmove])
     
     if move % 2 == 0:
         winjudgement(1,posx,posy)
@@ -180,6 +180,7 @@ def aimove():
         
     #手数+1
     move += 1
+    totalmove += 1
     
     #如果存在,删除上一手棋子高亮
     if windows_visible == True:
@@ -308,7 +309,7 @@ class net(nn.Module):
         super(net,self).__init__()
         
         #输入模块
-        self.layer1 = nn.Conv2d(in_channels=3, out_channels=256, stride=1, kernel_size=5, padding=2)
+        self.layer1 = nn.Conv2d(in_channels=5, out_channels=256, stride=1, kernel_size=5, padding=2)
         
         self.layer2 = torch.nn.GroupNorm(32,256)
         
@@ -325,65 +326,95 @@ class net(nn.Module):
         
         self.layer8 = torch.nn.GroupNorm(32,256)
         
+        self.layer9 = nn.ReLU()
+        
         #残差模块2
-        self.layer9 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
+        self.layer10 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer10 = torch.nn.GroupNorm(32,256)
+        self.layer11 = torch.nn.GroupNorm(32,256)
         
-        self.layer11 = nn.ReLU()
+        self.layer12 = nn.ReLU()
         
-        self.layer12 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
+        self.layer13 = nn.Conv2d(in_channels=256, out_channels=256, stride=1, kernel_size=5, padding=2)
         
-        self.layer13 = torch.nn.GroupNorm(32,256)
+        self.layer14 = torch.nn.GroupNorm(32,256)
         
-        
-        self.layer14 = nn.ReLU()
-        
+        self.layer15 = nn.ReLU()
         
         #价值头
-        self.layer15 = nn.Conv2d(in_channels=256, out_channels=1, stride=1, kernel_size=1, padding=0)
+        self.layer16 = nn.Conv2d(in_channels=256, out_channels=2, stride=1, kernel_size=1, padding=0)
         
-        self.layer16 = torch.nn.GroupNorm(1,1)
+        self.layer17 = torch.nn.GroupNorm(1,2)
         
-        self.layer17 = nn.ReLU()
+        self.layer18 = nn.ReLU()
         
-        self.layer18 = nn.Flatten(start_dim=0, end_dim=3)
+        self.layer19 = nn.Flatten(start_dim=0, end_dim=3)
         
-        self.layer19 = nn.Linear(in_features=225, out_features=128)
+        self.layer20 = nn.Linear(in_features=450, out_features=128)
         
-        self.layer20 = nn.ReLU()
+        self.layer21 = nn.ReLU()
         
-        self.layer21 = nn.Linear(in_features=128, out_features=1)
+        self.layer22 = nn.Linear(in_features=128, out_features=1)
         
-        self.layer22 = nn.Tanh()
-        
+        self.layer23 = nn.Tanh()
+        """
         #He正态分布初始化
         for layer in self.modules():
             if isinstance(layer, (nn.Conv2d, nn.Linear)):
                 nn.init.kaiming_normal_(layer.weight, nonlinearity='relu')
                 nn.init.constant_(layer.bias, 0)
-                
-    def forward(self,inputs):
+        """
+    def forward(self,inputs,posx,posy):
         
         global x,y
         
         inputs = inputs.flatten()
         
         #给输入分通道[batch_size, channel, x, y]
-        inputs_channels = np.zeros((1,3,x,y), dtype = int)
-        
-        for i in range(15):
-            for j in range(15):
-                
-                if inputs[i * 15 + j] == 1:
-                    inputs_channels[0][0][i][j] = 1 #黑棋
+        inputs_channels = np.zeros((1,5,x,y), dtype = int)
+
+        #当前黑落子
+        if np.count_nonzero(inputs == 0) % 2 == 0:
+            
+            for i in range(15):
+                for j in range(15):
                     
-                if inputs[i * 15 + j] == -1:
-                    inputs_channels[0][1][i][j] = 1 #白棋
+                    if inputs[i * 15 + j] == 1:
+                        inputs_channels[0][0][i][j] = 1 #黑棋
+                        
+                    if inputs[i * 15 + j] == -1:
+                        inputs_channels[0][1][i][j] = 1 #白棋
+                        
+                    if inputs[i * 15 + j] == 0:
+                        inputs_channels[0][2][i][j] = 1 #空
+                        
+            #当前黑落子状态输入
+            inputs_channels[0,3,:,:] = 1
+            #上一手状态输入
+            if posx != -1:
+                inputs_channels[0][4][posx][posy] = 1
+            
+        #当前白落子，转换棋盘
+        else:
+            
+            for i in range(15):
+                for j in range(15):
                     
-                if inputs[i * 15 + j] == 0:
-                    inputs_channels[0][2][i][j] = 1 #空
-                    
+                    if inputs[i * 15 + j] == 1:
+                        inputs_channels[0][1][i][j] = 1 #黑棋
+                        
+                    if inputs[i * 15 + j] == -1:
+                        inputs_channels[0][0][i][j] = 1 #白棋
+                        
+                    if inputs[i * 15 + j] == 0:
+                        inputs_channels[0][2][i][j] = 1 #空
+
+            #当前白落子状态输入
+            inputs_channels[0,3,:,:] = 0
+            #上一手状态输入
+            if posx != -1:
+                inputs_channels[0][4][posx][posy] = 1
+            
         inputs_channels = inputs_channels.astype('float32')
         
         inputs_tensor = torch.from_numpy(inputs_channels)
@@ -410,7 +441,8 @@ class net(nn.Module):
         mid = self.layer19(mid)
         mid = self.layer20(mid)
         mid = self.layer21(mid)
-        outputs = self.layer22(mid)
+        mid = self.layer22(mid)
+        outputs = self.layer23(mid)
         return outputs
     
 #模型初始化
@@ -428,7 +460,7 @@ loss_function = nn.MSELoss()
 
 def train():
     
-    global targets,model_copy,bwin,wwin,draw,totalloss,maxvalue
+    global targets,model_copy,bwin,wwin,draw,totalloss,totalstep,maxvalue
     
     #AdamW优化器
     optimizer = torch.optim.AdamW(model_copy.parameters())
@@ -444,42 +476,53 @@ def train():
         inputs = inputs.astype('float32')
         inputs_tensor = torch.from_numpy(inputs)
         
-        #下一步的奖励r
-        #黑胜，前一步的黑棋正奖励
-        if bwin == True and shufflelist[i] == s.shape[0] - 1:
-            reward = 1
-        #白胜，前一步的白棋正奖励
-        elif wwin == True and shufflelist[i] == s.shape[0] - 1:
-            reward = 1
-        else:
-            reward = 0
-            
         #惩罚系数γ
         gamma = -0.9
         
         #目标
         targets = np.array([0], dtype = 'float32')
+
+        #下一步的奖励r
+        reward = 0
         
+        #黑胜，前一步的黑棋正奖励
+        if bwin == True and shufflelist[i] == s.shape[0] - 1:
+            reward = 1
+        elif bwin == True and np.sum(s[shufflelist[i] + 1,:,:] == 0) == 224:
+            reward = 1
+            
+        #白胜，前一步的白棋正奖励
+        elif wwin == True and shufflelist[i] == s.shape[0] - 1:
+            reward = 1
+        elif wwin == True and np.sum(s[shufflelist[i] + 1,:,:] == 0) == 224:
+            reward = 1
+            
         #黑胜，前两步的白棋负价值
-        if bwin == True and shufflelist[i] == s.shape[0] - 2:
+        elif bwin == True and shufflelist[i] == s.shape[0] - 2:
+            targets[0] = -0.9
+        elif bwin == True and np.sum(s[shufflelist[i] + 2,:,:] == 0) == 224:
             targets[0] = -0.9
         #白胜，前两步的黑棋负价值
         elif wwin == True and shufflelist[i] == s.shape[0] - 2:
             targets[0] = -0.9
+        elif wwin == True and np.sum(s[shufflelist[i] + 2,:,:] == 0) == 224:
+            targets[0] = -0.9
             
         #最后一步targets = reward
-        elif shufflelist[i] == s.shape[0] - 1:
+        if shufflelist[i] == s.shape[0] - 1:
+            targets[0] = reward
+        elif np.sum(s[shufflelist[i] + 1,:,:] == 0) == 224:
             targets[0] = reward
         else:
-            targets[0] = maxvalue[shufflelist[i]+1] * gamma + reward
+            targets[0] = maxvalue[shufflelist[i] + 1] * gamma + reward
             
         targets = torch.from_numpy(targets).cuda()
         
         #计算损失
-        outputs = model_copy.forward(inputs)
-        
-        if shufflelist[i] % 2 == 1:
-            outputs = torch.mul(outputs,-1)
+        if np.sum(s[shufflelist[i],:,:] == 0) == 224:
+            outputs = model_copy.forward(inputs,-1,-1)
+        else:
+            outputs = model_copy.forward(inputs,a[shufflelist[i] - 1][0],a[shufflelist[i] - 1][1])
             
         loss = loss_function(outputs,targets)
         
@@ -498,8 +541,11 @@ def train():
         #print("loss:",loss)
         totalloss += float(loss)
         
+    totalstep = s.shape[0]
+    
 for k in range(upgrade):
     
+    totalmove = 0
     totalloss = 0
     totalstep = 0
     
@@ -511,16 +557,17 @@ for k in range(upgrade):
     model_copy = copy.deepcopy(model)
     model_copy = model_copy.to(device)
     
+    #状态空间s（每一手棋盘的记录）
+    s = np.zeros((size*x*y,x,y), dtype = int)
+    
+    #动作空间a（当前落子位置的记录）
+    a = np.zeros((size*x*y,2), dtype = int)
+    
+    #最大价值
+    maxvalue = np.zeros((size*x*y), dtype = 'float32')
+    
     for m in range(size):
         
-        #状态空间s（每一手棋盘的记录）
-        s = np.zeros((x*y,x,y), dtype = int)
-        
-        #动作空间a（当前落子位置的记录）
-        a = np.zeros((x*y,2), dtype = int)
-        
-        #最大价值
-        maxvalue = np.zeros((x*y), dtype = 'float32')
         maxposx = np.zeros((x*y), dtype = 'int')
         maxposy = np.zeros((x*y), dtype = 'int')
         
@@ -532,21 +579,20 @@ for k in range(upgrade):
             if windows_visible == True:
                 win.close()
                 
-        #删除数据为0的部分
-        for i in range(225):
-            
-            if np.any(s[i,:,:]) == False:
-                s = s[:i,:,:]
-                a = a[:i,:]
-                maxvalue = maxvalue[:i]
-                break
-            
-        for i in range(1):
-            train()
-            
         print()
-        totalstep += s.shape[0]
         
+    #删除数据为0的部分
+    for i in range(225 * size):
+        
+        if np.any(s[i,:,:]) == False:
+            s = s[:i,:,:]
+            a = a[:i,:]
+            maxvalue = maxvalue[:i]
+            break
+        
+    train()
+    print()
+    
     torch.save(model_copy, "model.pth")
     print("training is finished")
     print()
